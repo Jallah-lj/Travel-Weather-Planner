@@ -1,0 +1,43 @@
+import { test, expect } from '@playwright/test'
+
+test('account creation, logout, login, errors and route protection', async ({ page }) => {
+  const email = `auth-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`
+  const password = 'Test-weather-passphrase-42'
+  await page.goto('/app')
+  await expect(page).toHaveURL(/\/login$/)
+  await page.getByRole('link', { name: 'Create an account', exact: true }).click()
+  await page.getByLabel('Full name').fill('Test Traveler')
+  await page.getByLabel('Email address').fill(email)
+  await page.getByLabel('Password', { exact: true }).fill(password)
+  await page.getByLabel('Confirm password').fill('not-the-same')
+  await page.getByRole('button', { name: 'Create account', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('do not match')
+  await page.getByLabel('Confirm password').fill(password)
+  await page.getByRole('button', { name: 'Show password', exact: true }).click()
+  await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute('type', 'text')
+  await page.getByRole('button', { name: 'Create account', exact: true }).click()
+  await expect(page).toHaveURL(/\/app$/)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Test Traveler')
+  await page.reload()
+  await expect(page).toHaveURL(/\/app$/)
+  if ((page.viewportSize()?.width || 1280) < 1024) await page.getByRole('button', { name: 'Open navigation menu' }).click()
+  await page.getByRole('button', { name: 'Log out', exact: true }).filter({ visible: true }).click()
+  await page.getByLabel('Email address').fill(email)
+  await page.getByLabel('Password', { exact: true }).fill('incorrect-password')
+  await page.getByRole('button', { name: 'Log in', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Invalid email or password')
+  await page.getByLabel('Password', { exact: true }).fill(password)
+  await page.getByRole('button', { name: 'Log in', exact: true }).click()
+  await expect(page).toHaveURL(/\/app$/)
+})
+
+test('homepage account links and responsive auth layout', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'Open dashboard' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Create account', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.getByRole('link', { name: 'Log in', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Welcome back.' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})

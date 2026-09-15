@@ -1,0 +1,46 @@
+import { directionsForLeg } from './directionsLinks'
+import { ModernSelect } from '../../components/ui/ModernSelect'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { ExternalLink, AlertTriangle, Clock3, Route, ShieldCheck } from 'lucide-react'
+import { api } from '../../services/api'
+import type { ActivityRoute, PrivatePlan, RoutingConfig, ScheduleCheck } from '../../types'
+import { Button } from '../../components/ui/Button'
+import { GoogleAttribution } from './GoogleAttribution'
+import { GoogleRouteMap } from './GoogleRouteMap'
+
+export function DayRoutingPanel({plan,dayIndex,dirty,config,onDayChange,onSave,saveDisabled}:{plan:PrivatePlan;dayIndex:number;dirty:boolean;config?:RoutingConfig;onDayChange:(index:number)=>void;onSave:()=>Promise<void>;saveDisabled:boolean}){
+ const day=plan.itinerary[dayIndex]
+ const [buffer,setBuffer]=useState(10);const [busy,setBusy]=useState('');const [error,setError]=useState('');const [route,setRoute]=useState<ActivityRoute|null>(null);const [schedule,setSchedule]=useState<ScheduleCheck|null>(null)
+ const requestVersion=useRef(0)
+ useEffect(()=>{requestVersion.current++;setRoute(null);setSchedule(null);setError('');setBusy('')},[plan.revision,day?.date,dirty,buffer])
+ useEffect(()=>()=>{requestVersion.current++},[])
+ if(!day)return null
+ async function run(withRoute:boolean){
+  const version=++requestVersion.current
+  setBusy(withRoute?'route':'schedule');setError('');setRoute(null);setSchedule(null)
+  try{
+   const input={revision:plan.revision,day_date:day.date,buffer_minutes:buffer}
+   if(withRoute){const result=await api.routeActivities(plan.trip_id,input);if(version!==requestVersion.current)return;setRoute(result);setSchedule(result.schedule)}
+   else {const result=await api.checkSchedule(plan.trip_id,input);if(version!==requestVersion.current)return;setSchedule(result)}
+  }
+  catch(e){if(version===requestVersion.current)setError(e instanceof Error?e.message:'Unable to check this plan. Try again.')}
+  finally{if(version===requestVersion.current)setBusy('')}
+ }
+ const locationCount=day.items.filter(item=>item.location?.provider==='google').length
+ const canRoute=!!config?.routing_available&&day.items.length>=2&&day.items.length<=10&&locationCount===day.items.length
+ return <section id="directions" tabIndex={-1} className="scroll-mt-24 mt-6 rounded-2xl border border-black/10 bg-white p-5 md:p-7"><div className="flex items-center gap-3"><Route className="text-forest" size={23}/><div><h2 className="text-2xl font-semibold">Directions & schedule</h2><p className="mt-1 text-xs text-slate">{day.date} · {locationCount}/{day.items.length} activities with Google place references</p></div></div>
+ <p className="mt-4 text-sm leading-6 text-slate">Get directions between your activities, then open Google Maps for navigation. Routes follow the saved activity order—not flights or inter-city bookings.</p>
+ <div className="mt-5 max-w-sm"><ModernSelect label="Day for directions" value={String(dayIndex)} onValueChange={value=>onDayChange(Number(value))} disabled={!!busy||saveDisabled} options={plan.itinerary.map((entry,index)=>({value:String(index),label:`Day ${index+1} · ${entry.date}`,description:`${entry.items.length} activities`}))}/></div>
+ <ol className="mt-5 grid gap-3 text-sm sm:grid-cols-3"><li className="rounded-xl bg-cream p-4"><strong>1. Link your places</strong><p className="mt-2 text-xs leading-5 text-slate">Choose a real venue for each of 2–10 activities. {locationCount}/{day.items.length} linked.</p><Link to="#itinerary" className="mt-3 inline-flex min-h-10 items-center font-semibold text-forest underline">Edit activity locations</Link></li><li className="rounded-xl bg-cream p-4"><strong>2. Save your trip</strong><p className="mt-2 text-xs leading-5 text-slate">Add durations and choose driving, walking or cycling in the itinerary, then save.</p>{dirty?<Button className="mt-3" variant="secondary" disabled={saveDisabled||!!busy} onClick={onSave}>Save for directions</Button>:<p className="mt-3 text-xs font-semibold text-forest">Changes saved</p>}</li><li className="rounded-xl bg-cream p-4"><strong>3. Calculate & go</strong><p className="mt-2 text-xs leading-5 text-slate">Use Calculate directions below. Open a route leg in Google Maps to follow directions on your device.</p></li></ol>
+ {!config?.routing_available&&<div className="mt-4 rounded-xl border border-amber/40 bg-cream p-4"><p className="text-sm font-semibold">Google Maps Platform setup required</p><p className="mt-2 text-xs leading-5 text-slate">Enable Places API (New), Routes API, and Maps JavaScript API. Configure a server-restricted key and a separate website-restricted browser key. The Gemini key is not used here. Schedule-only checks still work. Production additionally requires Redis quota enforcement and reviewed legal disclosures.</p></div>}
+ {config?.routing_available&&!config.map_available&&<div className="mt-4 rounded-xl border border-black/10 bg-cream p-4"><p className="text-sm font-semibold">Place search and route estimates are connected</p><p className="mt-2 text-xs leading-5 text-slate">You can calculate directions here and open each leg in Google Maps. The embedded Google map is not enabled on this site yet; a separate browser key is needed only for that display.</p></div>}
+ <div className="mt-5 flex flex-wrap items-end gap-3"><label htmlFor="travel-buffer"><span className="form-label">Transfer buffer (minutes)</span><input disabled={!!busy} id="travel-buffer" className="form-input max-w-36" type="number" min={0} max={120} value={buffer} onChange={e=>setBuffer(Math.max(0,Math.min(120,Math.round(Number(e.target.value)||0))))}/></label><Button variant="secondary" disabled={dirty||!!busy} onClick={()=>run(false)}><Clock3 size={16}/>{busy==='schedule'?'Checking…':'Check schedule'}</Button><Button disabled={dirty||!!busy||!canRoute} onClick={()=>run(true)}><Route size={16}/>{busy==='route'?'Calculating…':'Calculate directions'}</Button></div>
+ <p className="mt-3 text-xs leading-5 text-slate">{dirty?'Save all changes first. Earlier results are cleared whenever the plan changes.':'A complete route needs 2–10 activities, each linked to a physical Google place. Estimates exclude live traffic, flights, trains, queues, and opening hours.'}</p>
+ {config&&<p className="mt-2 text-xs text-slate">App limits: {config.limits.routes_per_minute} route requests/minute and {config.limits.routes_per_day}/day per account; {config.limits.places_per_day} place requests/day. Google billing and project quotas also apply.</p>}
+ {error&&<p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>}
+ {schedule&&<div aria-live="polite" className="mt-5 rounded-xl border border-black/10 bg-cream p-4"><h3 className="flex items-center gap-2 font-semibold">{schedule.status==='conflicts'?<AlertTriangle size={18}/>:<ShieldCheck size={18}/>} {schedule.status==='conflicts'?'Timing conflicts found':schedule.status==='incomplete'?'More details needed':'No timing conflicts detected'}</h3><ul className="mt-3 space-y-2 text-sm text-slate">{schedule.issues.map((issue,index)=><li key={index}>{issue.message}</li>)}</ul><p className="mt-3 text-xs leading-5 text-slate">{schedule.note}</p></div>}
+ {route&&!dirty&&route.activity_ids.join('|')===day.items.map(item=>item.id).join('|')&&<div className="mt-6 space-y-4"><div className="flex flex-wrap gap-4"><p className="rounded-xl bg-cream px-4 py-3 text-sm"><strong>{(route.distance_meters/1000).toFixed(1)} km</strong> total distance</p><p className="rounded-xl bg-cream px-4 py-3 text-sm"><strong>{Math.ceil(route.duration_seconds/60)} min</strong> estimated travel</p></div><p className="text-xs leading-5 text-slate">{route.notice}</p>{route.warnings.map((warning,index)=><p key={index} className="rounded-lg bg-cream p-3 text-sm">{warning}</p>)}<p className="rounded-xl bg-forest/5 p-4 text-sm leading-6"><strong>Ready to go?</strong> Choose a leg below to open Google Maps in a new tab or app. Google Maps may recalculate the route and travel time for current conditions.</p><GoogleRouteMap browserKey={config?.browser_key||''} route={route} items={day.items}/><ol className="space-y-2">{route.legs.map((leg,index)=><li key={index} className="rounded-xl border border-black/10 p-4 text-sm"><strong>{index+1}. {day.items[index].title} → {day.items[index+1].title}</strong><p className="mt-1 text-xs text-slate">{(leg.distance_meters/1000).toFixed(1)} km · about {Math.ceil(leg.duration_seconds/60)} min</p><a href={directionsForLeg(route,day.items,index)} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-forest px-4 py-3 text-sm font-semibold text-white" aria-label={`Open leg ${index+1} in Google Maps`}>Open in Google Maps <ExternalLink size={15}/></a></li>)}</ol><p className="text-xs text-slate">Calculated {new Date(route.generated_at).toLocaleString()}. Route endpoints may be snapped to access roads.</p><GoogleAttribution/></div>}
+ <div className="mt-5 flex flex-wrap gap-4 border-t border-black/10 pt-4 text-xs text-slate"><Link className="underline" to="/legal/terms" target="_blank">Terms of use</Link><Link className="underline" to="/legal/privacy" target="_blank">Privacy policy</Link></div>
+ </section>
+}

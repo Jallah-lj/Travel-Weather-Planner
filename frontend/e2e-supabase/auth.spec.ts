@@ -1,0 +1,100 @@
+// Real Supabase browser SDK against explicit protocol fixtures. No live emails/accounts.
+import {test,expect,type Page} from '@playwright/test'
+const user={id:'11111111-1111-4111-8111-111111111111',aud:'authenticated',role:'authenticated',email:'traveler@example.test',email_confirmed_at:'2026-09-15T00:00:00Z',user_metadata:{display_name:'Traveler'},app_metadata:{provider:'email'},created_at:'2026-09-15T00:00:00Z'}
+function session(offset=3600){
+ const expires_at=Math.floor(Date.now()/1000)+offset
+ const access_token=[{alg:'HS256',typ:'JWT'},{sub:user.id,aud:'authenticated',role:'authenticated',exp:expires_at}].map(value=>Buffer.from(JSON.stringify(value)).toString('base64url')).join('.')+'.fixture-signature'
+ return {access_token,refresh_token:'fixture-refresh-token',expires_in:3600,expires_at,token_type:'bearer',user}
+}
+async function fixtures(page:Page){
+ await page.route('**/api/v1/**',route=>route.fulfill({json:{success:true,data:[]}}))
+ await page.route('https://auth.example.test/auth/v1/**',route=>{
+  const url=new URL(route.request().url())
+  if(url.pathname.endsWith('/signup'))return route.fulfill({json:user})
+  if(url.pathname.endsWith('/user'))return route.fulfill({json:user})
+  if(url.pathname.endsWith('/logout'))return route.fulfill({status:204,body:''})
+  if(url.pathname.endsWith('/recover'))return route.fulfill({json:{}})
+  return route.fulfill({json:session()})
+ })
+}
+test('email confirmation, password reset and SDK logout',async({page})=>{
+ await fixtures(page)
+ await page.goto('/register')
+ await page.getByLabel('Full name').fill('Traveler')
+ await page.getByLabel('Email address').fill(user.email)
+ await page.getByLabel('Password',{exact:true}).fill('A-unique-passphrase42')
+ await page.getByLabel('Confirm password',{exact:true}).fill('A-unique-passphrase42')
+ await page.getByRole('button',{name:'Create account',exact:true}).click()
+ await expect(page.getByRole('status')).toContainText('Check your email')
+ await page.goto('/auth/callback?token_hash=test-confirm&type=email')
+ await expect(page).toHaveURL('/app')
+ await page.goto('/forgot-password')
+ await page.getByLabel('Email address').fill(user.email)
+ await page.getByRole('button',{name:'Send reset email'}).click()
+ await expect(page.getByRole('status')).toContainText('If an account exists')
+ await page.goto('/auth/callback?token_hash=test-recovery&type=recovery')
+ await expect(page).toHaveURL('/reset-password')
+ await page.getByLabel('New password',{exact:true}).fill('Another-unique-passphrase42')
+ await page.getByLabel('Confirm password',{exact:true}).fill('Another-unique-passphrase42')
+ const update=page.waitForRequest(request=>request.method()==='PUT'&&request.url().endsWith('/auth/v1/user'))
+ const logout=page.waitForRequest(request=>request.url().includes('/auth/v1/logout'))
+ await page.getByRole('button',{name:'Save new password'}).click()
+ expect((await update).postDataJSON().password).toBe('Another-unique-passphrase42')
+ await logout
+ await expect(page).toHaveURL('/login')
+ expect(await page.evaluate(()=>sessionStorage.getItem('travel-weather-supabase'))).toBeNull()
+})
+test('SDK refresh restores a protected page and uses rotated bearer token',async({page})=>{
+ await fixtures(page)
+ await page.addInitScript(value=>sessionStorage.setItem('travel-weather-supabase',JSON.stringify(value)),session(-60))
+ const apiRequest=page.waitForRequest(request=>request.url().endsWith('/api/v1/trips'))
+ const refreshed=page.waitForRequest(request=>request.url().includes('grant_type=refresh_token'))
+ await page.goto('/app/trips')
+ expect((await refreshed).postDataJSON().refresh_token).toBe('fixture-refresh-token')
+ await expect(page.getByRole('heading',{name:'Trips',exact:true})).toBeVisible()
+ await expect(page).toHaveURL('/app/trips')
+ const stored=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('travel-weather-supabase')||'null'))
+ expect(stored.expires_at).toBeGreaterThan(Date.now()/1000)
+ expect((await apiRequest).headers().authorization).toBe(`Bearer ${stored.access_token}`)
+})
+test('invalid confirmation link shows recovery instead of granting a session',async({page})=>{
+ await fixtures(page)
+ await page.route('https://auth.example.test/auth/v1/verify',route=>route.fulfill({status:403,json:{error_code:'otp_expired',msg:'Token expired'}}))
+ await page.goto('/auth/callback?token_hash=expired&type=email')
+ await expect(page.getByRole('alert')).toContainText('invalid, expired')
+ await expect(page).toHaveURL('/auth/callback')
+ await page.goto('/app/trips')
+ await expect(page).toHaveURL('/login')
+})
+
+test('password login and visible logout controls',async({page,isMobile})=>{
+ await fixtures(page)
+ await page.goto('/login')
+ await page.getByLabel('Email address').fill(user.email)
+ await page.getByLabel('Password',{exact:true}).fill('A-unique-passphrase42')
+ await page.getByRole('button',{name:'Log in',exact:true}).click()
+ await expect(page).toHaveURL('/app')
+ if(isMobile)await page.getByRole('button',{name:'Open navigation menu'}).click()
+ await page.getByRole('button',{name:'Log out',exact:true}).filter({visible:true}).click()
+ await expect(page).toHaveURL('/login')
+ await page.goto('/app/trips')
+ await expect(page).toHaveURL('/login')
+})
+
+test('PKCE confirmation can complete in a new tab of the same browser',async({page,context})=>{
+ await fixtures(page)
+ await page.goto('/register')
+ await page.getByLabel('Full name').fill('Traveler')
+ await page.getByLabel('Email address').fill(user.email)
+ await page.getByLabel('Password',{exact:true}).fill('A-unique-passphrase42')
+ await page.getByLabel('Confirm password',{exact:true}).fill('A-unique-passphrase42')
+ await page.getByRole('button',{name:'Create account',exact:true}).click()
+ await expect(page.getByRole('status')).toContainText('Check your email')
+ const emailTab=await context.newPage();await fixtures(emailTab)
+ const exchange=emailTab.waitForRequest(request=>request.url().includes('grant_type=pkce'))
+ await emailTab.goto('/auth/callback?code=fixture-auth-code')
+ const body=(await exchange).postDataJSON()
+ expect(body.auth_code).toBe('fixture-auth-code');expect(body.code_verifier.length).toBeGreaterThan(40)
+ await expect(emailTab).toHaveURL('/app')
+ expect(await emailTab.evaluate(()=>localStorage.getItem('travel-weather-supabase'))).toBeNull()
+})

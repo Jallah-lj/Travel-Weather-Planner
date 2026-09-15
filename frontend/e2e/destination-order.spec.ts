@@ -1,0 +1,28 @@
+import { test, expect } from '@playwright/test'
+
+test('destination list stays alphabetical, including new search selections',async({page})=>{
+  await page.addInitScript(()=>sessionStorage.setItem('travel-weather-session',JSON.stringify({user:{email:'order@example.com'},access_token:'test-only',expiresAt:Date.now()+600000})))
+  const place=(id:string,name:string,country:string,latitude:number)=>({id,name,country,country_code:'RW',flag:'🌍',latitude,longitude:30,timezone:'Africa/Kigali',destination_type:'city'})
+  const base=[place('z','Zürich','Switzerland',47),place('l','London','United Kingdom',51),place('a','Accra','Ghana',5),place('c','London','Canada',43)]
+  const berlin=place('b','Berlin','Germany',52)
+  await page.route('**/api/v1/destinations/search?*',route=>route.fulfill({json:{success:true,data:new URL(route.request().url()).searchParams.get('q')?.toLowerCase()==='berlin'?[berlin]:base}}))
+  await page.route('**/api/v1/weather/**',route=>route.fulfill({json:{success:true,data:{temperature:20,feels_like:20,condition:'Test',icon:'sun',humidity:60,wind:10,uv:3,precipitation:20},meta:{provider:'test'}}}))
+  await page.goto('/app/weather-map')
+  const trigger=page.getByRole('button',{name:'Find a destination',exact:true})
+  await trigger.click()
+  await expect(page.locator('.modern-select-option .modern-option-copy > span')).toHaveText(['Accra','London','London','Zürich'])
+  const options=page.getByRole('option')
+  await expect(options.nth(1)).toContainText('Canada')
+  await expect(options.nth(2)).toContainText('United Kingdom')
+  await page.keyboard.press('Escape')
+  await page.getByRole('combobox',{name:'Search worldwide'}).fill('Berlin')
+  await page.getByRole('option',{name:/Berlin/}).click()
+  await trigger.click()
+  await expect(page.locator('.modern-select-option .modern-option-copy > span')).toHaveText(['Accra','Berlin','London','London','Zürich'])
+  await expect(page.getByRole('option',{name:/Berlin/})).toHaveAttribute('aria-selected','true')
+  await page.getByRole('combobox',{name:'Filter destinations'}).fill('London')
+  await expect(page.getByRole('option').first()).toContainText('Canada')
+  await page.getByRole('option').last().click()
+  await expect(trigger).toContainText('United Kingdom')
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+})

@@ -1,0 +1,41 @@
+import { test, expect } from '@playwright/test'
+
+test('language settings exist, persist, and are sent with AI drafts',async({page,request})=>{
+  const r=await request.post('/api/v1/auth/register',{data:{email:`language-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`,password:'Language-tests-password42',display_name:'Language Tester'}})
+  expect(r.status()).toBe(201)
+  const session=(await r.json()).data
+  await page.addInitScript(s=>sessionStorage.setItem('travel-weather-session',JSON.stringify({...s,expiresAt:Date.now()+600000})),session)
+  await page.goto('/app/settings')
+  await page.getByRole('link',{name:/Language & region/}).click()
+  await expect(page.getByRole('heading',{name:'Language & region',level:1})).toBeVisible()
+  await expect(page.getByText('Interface language: English')).toBeVisible()
+  await page.getByRole('button',{name:'AI response language',exact:true}).click()
+  await page.getByLabel('Find an AI response language').fill('French')
+  await page.getByRole('option',{name:/French/}).click()
+  await page.getByRole('button',{name:'Regional format',exact:true}).click()
+  await page.getByRole('option',{name:/French.*France/}).click()
+  await expect(page.getByTestId('date-preview')).toContainText('septembre')
+  await page.getByRole('button',{name:'Save language preferences'}).click()
+  await expect(page.getByRole('status')).toContainText('saved on this device')
+  await page.reload()
+  await expect(page.getByRole('button',{name:'AI response language',exact:true})).toContainText('French')
+  await expect(page.getByRole('button',{name:'Regional format',exact:true})).toContainText('French · France')
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+  await page.route('**/api/v1/ai/planning-options',route=>route.fulfill({json:{success:true,data:{ai_available:true,provider:'Test model',max_assisted_days:14}}}))
+  let language=''
+  await page.route('**/api/v1/ai/plan-draft',async route=>{
+    language=route.request().postDataJSON().output_language
+    await route.fulfill({status:503,json:{success:false,error:{message:'Test response: language received'}}})
+  })
+  await page.goto('/planner')
+  await page.getByRole('radio',{name:'Use AI assistance',exact:true}).check()
+  await page.getByRole('button',{name:'Continue',exact:true}).click()
+  await page.getByRole('combobox',{name:'Search worldwide'}).fill('Kigali')
+  await page.getByRole('option',{name:/Kigali/}).first().click()
+  await page.getByRole('button',{name:'Continue',exact:true}).click()
+  await expect(page.getByText('AI response language:')).toContainText('French')
+  await page.getByRole('checkbox').check()
+  await page.getByRole('button',{name:'Generate AI draft'}).click()
+  await expect(page.getByRole('alert')).toContainText('language received')
+  expect(language).toBe('fr')
+})

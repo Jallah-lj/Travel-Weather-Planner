@@ -1,0 +1,20 @@
+import { useState } from 'react'
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Droplets, Wind } from 'lucide-react'
+import type { ForecastDay, HourlyPoint } from '../../types'
+import { WeatherIcon } from '../../components/ui/WeatherIcon'
+
+export function ForecastPanel({ forecast, hourly }: { forecast: ForecastDay[]; hourly: HourlyPoint[] }) {
+  const [selected, setSelected] = useState(0)
+  return <section id="weather" className="scroll-mt-24">
+    <div className="mb-5 flex items-end justify-between"><div><p className="eyebrow">Your forecast</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.03em] md:text-3xl">Day by day</h2></div><span className="hidden text-xs text-slate md:block">Click a day for detail</span></div>
+    <div className="no-scrollbar flex gap-3 overflow-x-auto pb-2">{forecast.map((day, i) => <button key={day.date} onClick={() => setSelected(i)} className={`min-w-[126px] flex-1 rounded-xl border p-4 text-left transition md:min-w-[118px] ${selected === i ? 'border-forest bg-forest text-white shadow-card' : 'border-black/8 bg-white hover:-translate-y-0.5 hover:border-forest/30'}`}>
+      <span className={`block text-[10px] font-bold uppercase tracking-[.15em] ${selected === i ? 'text-white/55' : 'text-slate'}`}>{i === 0 ? 'Today' : day.day}</span><span className="mt-1 block text-xs font-semibold">{day.date.slice(5).replace('-', ' / ')}</span><WeatherIcon name={day.icon} className={`my-5 h-8 w-8 ${selected === i && 'text-amber'}`} /><div><span className="text-xl font-semibold">{day.high}°</span><span className={`ml-2 text-sm ${selected === i ? 'text-white/50' : 'text-slate'}`}>{day.low}°</span></div><span className={`mt-3 flex items-center gap-1 text-[11px] ${selected === i ? 'text-white/65' : 'text-slate'}`}><Droplets size={12} />{day.rain_probability}% · {day.label}</span>
+    </button>)}</div>
+    <div className="mt-5 rounded-2xl border border-black/8 bg-white p-5 md:p-7">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.16em] text-slate">Hourly outlook · {forecast[selected]?.day}</p><h3 className="mt-2 text-lg font-semibold">Comfortable morning, warmer toward midday</h3></div><div className="flex gap-4 text-xs text-slate"><span className="flex items-center gap-1"><Droplets size={13} /> Rain probability</span><span className="flex items-center gap-1"><Wind size={13} /> Wind km/h</span></div></div>
+      <div className="mt-5 h-[220px] w-full" aria-label="Hourly temperature chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={hourly} margin={{ top: 10, right: 8, left: -25, bottom: 0 }}><defs><linearGradient id="tempFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#dfa34a" stopOpacity={.38} /><stop offset="100%" stopColor="#dfa34a" stopOpacity={0} /></linearGradient></defs><CartesianGrid stroke="#17221d" strokeOpacity={.06} vertical={false} /><XAxis dataKey="time" tick={{ fill: '#6e7872', fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={{ fill: '#6e7872', fontSize: 11 }} axisLine={false} tickLine={false} unit="°" /><Tooltip contentStyle={{ borderRadius: 12, border: '1px solid rgba(0,0,0,.08)', boxShadow: '0 8px 30px rgba(0,0,0,.1)' }} formatter={(value) => [`${value}°C`, 'Temperature']} /><Area type="monotone" dataKey="temperature" stroke="#b7781f" strokeWidth={2.5} fill="url(#tempFill)" /></AreaChart></ResponsiveContainer></div>
+      <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto">{hourly.map(hour => <div key={hour.time} className="min-w-[76px] rounded-lg bg-[#f5f3ec] px-3 py-2 text-center"><span className="text-[10px] font-semibold text-slate">{hour.time}</span><WeatherIcon name={hour.icon} className="mx-auto my-2 h-5 w-5" /><span className="block text-sm font-semibold">{hour.temperature}°</span><span className="mt-1 block text-[9px] text-slate">{hour.precipitation}% rain</span></div>)}</div>
+    </div>
+  </section>
+}

@@ -1,0 +1,13 @@
+import { defaultDeparture, defaultReturn } from '../lib/tripDates'
+import { ArrowRight, Heart, MapPin, Plus } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { AppShell } from '../layouts/AppShell'
+import { Button } from '../components/ui/Button'
+import { useSavedDestinations } from '../hooks/useSavedDestinations'
+
+export function SavedDestinationsPage() {
+  const navigate = useNavigate(); const { saved, toggle } = useSavedDestinations()
+  return <AppShell><main className="mx-auto max-w-6xl px-5 pb-28 pt-8 md:px-8 lg:px-10 lg:pb-16 lg:pt-10"><div className="flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-end"><div><p className="eyebrow">Your shortlist</p><h1 className="mt-3 text-4xl font-semibold tracking-[-.04em] md:text-5xl">Saved destinations</h1><p className="mt-3 text-sm text-slate">Places you want to watch and plan later.</p></div><Link to="/app/explore"><Button variant="secondary"><Plus size={16} />Explore more</Button></Link></div>
+    {saved.length ? <div className="mt-9 grid gap-4 md:grid-cols-2 lg:grid-cols-3">{saved.map(destination => <article key={destination.id} className="rounded-2xl border border-black/8 bg-white p-5"><div className="flex items-start justify-between"><span className="grid h-14 w-14 place-items-center rounded-xl bg-[#eef1e9] text-3xl">{destination.flag}</span><button onClick={() => toggle(destination)} className="grid h-9 w-9 place-items-center rounded-full bg-amber text-ink" aria-label={`Remove ${destination.name} from saved`}><Heart size={16} fill="currentColor" /></button></div><p className="mt-7 flex items-center gap-1 text-[10px] font-bold uppercase tracking-[.15em] text-forest"><MapPin size={12} />{destination.country}</p><h2 className="mt-2 text-2xl font-semibold">{destination.name}</h2><p className="mt-2 text-xs text-slate">{destination.timezone}</p><Button className="mt-6 w-full" onClick={() => navigate('/planner', { state: { destination, departure: defaultDeparture, returnDate: defaultReturn } })}>Plan this trip <ArrowRight size={15} /></Button></article>)}</div> : <div className="mt-10 rounded-2xl border border-dashed border-black/15 bg-white px-6 py-20 text-center"><span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-amber/15 text-amber"><Heart size={24} /></span><h2 className="mt-5 text-2xl font-semibold">No saved destinations yet</h2><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate">Save places while exploring and they’ll appear here for quick weather-aware planning.</p><Link to="/app/explore"><Button className="mt-6">Explore destinations</Button></Link></div>}
+  </main></AppShell>
+}

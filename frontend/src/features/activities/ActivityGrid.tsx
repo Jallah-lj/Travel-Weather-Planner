@@ -1,0 +1,9 @@
+import { Camera, Clock3, Footprints, Mountain, Star, TreePalm, UtensilsCrossed } from 'lucide-react'
+import type { ActivityRecommendation } from '../../types'
+
+const activityIcons = { walking: Footprints, photography: Camera, hiking: Mountain, nature: TreePalm, dining: UtensilsCrossed }
+export function ActivityGrid({ activities }: { activities: ActivityRecommendation[] }) {
+  return <section className="scroll-mt-24"><div className="mb-5"><p className="eyebrow">Built around your interests</p><h2 className="mt-2 text-2xl font-semibold tracking-[-.03em] md:text-3xl">Today’s best activities</h2></div>
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{activities.map((activity, i) => { const Icon = activityIcons[activity.icon as keyof typeof activityIcons] || Footprints; return <article key={activity.name} className={`rounded-xl border border-black/8 bg-white p-5 ${i === 0 ? 'md:col-span-2 xl:col-span-1' : ''}`}><div className="flex items-start justify-between"><span className="grid h-10 w-10 place-items-center rounded-full bg-forest/8 text-forest"><Icon size={19} /></span><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.1em] ${activity.score >= 85 ? 'bg-green-100 text-green-800' : activity.score >= 70 ? 'bg-amber-100 text-amber-800' : 'bg-orange-100 text-orange-800'}`}>{activity.suitability}</span></div><h3 className="mt-4 text-lg font-semibold">{activity.name}</h3><div className="mt-2 flex gap-0.5 text-amber" aria-label={`${activity.rating} out of 5 stars`}>{[1,2,3,4,5].map(n => <Star key={n} size={13} fill={n <= activity.rating ? 'currentColor' : 'none'} className={n > activity.rating ? 'text-black/15' : ''} />)}</div><p className="mt-4 text-sm leading-6 text-slate">{activity.reason}</p><div className="mt-4 flex items-center gap-2 border-t border-black/7 pt-4 text-xs font-semibold text-forest"><Clock3 size={14} />Best time · {activity.best_time}</div></article> })}</div>
+  </section>
+}

@@ -1,0 +1,6 @@
+import type { TripStop } from '../../types'
+export function JourneyOverview({stops,activeId,onSelect}:{stops:TripStop[];activeId?:string;onSelect?:(stop:TripStop)=>void}){
+ return <section className="mt-6" aria-label="Journey stops"><h2 className="text-lg font-semibold">Your journey · {stops.length} {stops.length===1?'stop':'stops'}</h2><ol className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{stops.map((stop,index)=><li key={stop.id} className={`rounded-xl border p-4 ${activeId===stop.id?'border-forest bg-cream':'border-black/10 bg-white'}`}>
+ {onSelect?<button type="button" className="w-full text-left" onClick={()=>onSelect(stop)} aria-pressed={activeId===stop.id}><span className="text-xs font-semibold text-slate">Stop {index+1}</span><strong className="mt-1 block text-base">{stop.destination.flag} {stop.destination.name}</strong></button>:<><span className="text-xs text-slate">Stop {index+1}</span><strong className="mt-1 block">{stop.destination.flag} {stop.destination.name}</strong></>}
+ <p className="mt-2 text-xs leading-5 text-slate">{stop.arrival_date} – {stop.departure_date}<br/>{stop.destination.country} · {stop.destination.timezone}</p></li>)}</ol><p className="mt-2 text-xs text-slate">Stop order only—not a calculated travel route. Transfer activities belong to the arriving stop.</p></section>
+}

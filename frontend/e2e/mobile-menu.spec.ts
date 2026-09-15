@@ -1,0 +1,26 @@
+import { test, expect } from '@playwright/test'
+for (const width of [390, 820]) {
+  test(`navigation drawer works at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 })
+    await page.addInitScript(() => sessionStorage.setItem('travel-weather-session', JSON.stringify({ user: { email: 'menu@example.com' }, access_token: 'test-only', expiresAt: Date.now() + 600000 })))
+    await page.goto('/app/explore')
+    const trigger = page.getByRole('button', { name: 'Open navigation menu' })
+    await trigger.click()
+    const dialog = page.getByRole('dialog', { name: 'Your workspace' })
+    await expect(dialog).toBeVisible()
+    await expect(page).toHaveURL(/\/app\/explore$/)
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await expect(dialog.getByRole('link', { name: 'Explore destinations' })).toHaveAttribute('aria-current', 'page')
+    await page.keyboard.press('Escape')
+    await expect(dialog).not.toBeVisible()
+    await expect(trigger).toBeFocused()
+    await trigger.click()
+    await dialog.getByRole('link', { name: 'Saved destinations' }).click()
+    await expect(page).toHaveURL(/\/app\/saved$/)
+    await expect(page.getByRole('dialog')).not.toBeVisible()
+    await trigger.click()
+    await page.getByRole('button', { name: 'Close navigation menu' }).click()
+    await expect(trigger).toBeFocused()
+    expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden')
+  })
+}
